@@ -4,19 +4,30 @@ from module import SharedMLP
 
 class MultiResolutionEncoder(nn.Module):
     def __init__(self, latent_dim):
-        super().__init__()
+        super(MultiResolutionEncoder, self).__init__()
         self.latent_dim = latent_dim
 
         self.CMLP = nn.ModuleList([CombinedMLP(3, self.latent_dim) for _ in range(3)])
         self.MLP = SharedMLP(3, 1)
 
     def forward(self, x):
+        """Encoder
+
+        Args:
+            x (list): [xyz_det, xyz_sec, xyz_pri]
+
+        Returns:
+            tensor: latent vector (B, feature_vector)
+        """
         features = []
         for i in range(3):
-            features.append(self.CMLP[i](x[i]))
+            feature = self.CMLP[i](x[i])
+            features.append(feature)
 
-        x = torch.concat(features, dim=1)
+        x = torch.concat(features, dim=2)
+        x = x.transpose(1, 2).contiguous()
         encode_result = self.MLP(x)
+        encode_result = encode_result.view(-1, self.latent_dim)
 
         return encode_result
 
@@ -41,10 +52,10 @@ class CombinedMLP(nn.Module):
         x_512 = self.MLP3(x_256)
         x_1024 = self.MLP4(x_512)
 
-        feature_128 = torch.max(x_128, dim=2)[0]
-        feature_256 = torch.max(x_256, dim=2)[0]
-        feature_512 = torch.max(x_512, dim=2)[0]
-        feature_1024 = torch.max(x_1024, dim=2)[0]
+        feature_128 = torch.max(x_128, dim=2, keepdim=True)[0]
+        feature_256 = torch.max(x_256, dim=2, keepdim=True)[0]
+        feature_512 = torch.max(x_512, dim=2, keepdim=True)[0]
+        feature_1024 = torch.max(x_1024, dim=2, keepdim=True)[0]
 
         feature = torch.concat([feature_128,
                                 feature_256,
@@ -54,7 +65,12 @@ class CombinedMLP(nn.Module):
         return feature
 
 if __name__=="__main__":
-    x = torch.randn(10, 3, 100)
-    CMLP = CombinedMLP(3, 1920)
-    out = CMLP(x)
+    device = "cpu"
+    x_det = torch.randn(10, 3, 100, device=device)
+    x_sec = torch.randn(10, 3, 50, device=device)
+    x_pri = torch.randn(10, 3, 10, device=device)
+    x = [x_det, x_pri, x_sec]
+    encoder = MultiResolutionEncoder(latent_dim=1920)
+    out = encoder(x)
+
     print(out.shape)
