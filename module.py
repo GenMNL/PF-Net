@@ -52,6 +52,15 @@ def farthest_point_sampling(xyz, num_smpling):
     return centroids
 
 def index2point_converter(xyz, indices):
+    """converter that convert indices to cordinate
+
+    Args:
+        xyz (tensor): original points clouds (B, C, N)
+        indices (tensor): indices that represent sampling points (B, num_sampling)
+
+    Returns:
+        tensor: (B, C, num_sampling)
+    """
     device = xyz.device
     B, C, N = xyz.shape
     num_new_points = indices.shape[1]
@@ -74,4 +83,4 @@ if __name__=="__main__":
     out = farthest_point_sampling(x, 2)
     print(out)
     out = index2point_converter(x, out)
-    print(out)
+    print(out.shape)

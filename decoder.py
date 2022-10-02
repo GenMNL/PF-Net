@@ -31,6 +31,14 @@ class PointPyramidDecoder(nn.Module):
         self.conv3_det = nn.Conv1d(256, int(3*self.M/self.M2), 1)
 
     def forward(self, x):
+        """decoder to get completion result
+
+        Args:
+            x (tensor): feature vector (B, latent_dim)
+
+        Returns:
+            3 resolution result: (B, 3, num_pri), (B, 3, num_sec), (B, 3, num_det)
+        """
         # get input latent vector of each scale
         x_det = F.relu(self.fc1(x)) # (B, 1024)
         x_sec = F.relu(self.fc2(x_det)) # (B, 512)
@@ -61,6 +69,7 @@ class PointPyramidDecoder(nn.Module):
         out_det = out_det.view(-1, self.M2, int(self.M/self.M2), 3)
         out_det = out_det + out_sec_expand
         out_det = out_det.view(-1, self.M, 3)
+
         return out_pri, out_sec, out_det
 
 # discriminator
@@ -82,11 +91,19 @@ class Discriminator(nn.Module):
         )
 
     def forward(self, x):
+        """Discriminator
+
+        Args:
+            x (tensor): (B, 3, num_points)
+
+        Returns:
+            tensor: (B, 0 or 1) 0 and 1 are fake and real, respectively
+        """
         x = self.CMLP(x)
         x = x.view(-1, 448)
         out = self.fc(x)
 
-        return out
+        return out # There is sigmoid in loss, so no need to add sigmoid in layer
 
 # ----------------------------------------------------------------------------------------
 

@@ -14,19 +14,19 @@ class MultiResolutionEncoder(nn.Module):
         """Encoder
 
         Args:
-            x (list): [xyz_det, xyz_sec, xyz_pri]
+            x (list): [xyz_pri, xyz_sec, xyz_det] (permutation invariance)
 
         Returns:
-            tensor: latent vector (B, feature_vector)
+            tensor: latent vector (B, latent_dim)
         """
         features = []
         for i in range(3):
-            feature = self.CMLP[i](x[i])
+            feature = self.CMLP[i](x[i]) # (B, latent_dim, 1)
             features.append(feature)
 
-        x = torch.concat(features, dim=2)
-        x = x.transpose(1, 2).contiguous()
-        encode_result = self.MLP(x)
+        x = torch.concat(features, dim=2) # (B, latent_dim, 3)
+        x = x.transpose(1, 2).contiguous() # (B, 3, latent_dim)
+        encode_result = self.MLP(x) # (B, 1, latent_dim)
         encode_result = encode_result.view(-1, self.latent_dim)
 
         return encode_result
@@ -47,6 +47,14 @@ class CombinedMLP(nn.Module):
         self.MLP4 = SharedMLP(512, self.out_channels - (128+256+512))
 
     def forward(self, x):
+        """Combined Shared MLP
+
+        Args:
+            x (tensor): (B, C, N)
+
+        Returns:
+            tensor: feature vector(B, latent_dim, 1)
+        """
         x_128 = self.MLP1(x)
         x_256 = self.MLP2(x_128)
         x_512 = self.MLP3(x_256)
@@ -61,15 +69,15 @@ class CombinedMLP(nn.Module):
                                 feature_256,
                                 feature_512,
                                 feature_1024], dim=1)
-        
+
         return feature
 
 if __name__=="__main__":
     device = "cpu"
-    x_det = torch.randn(10, 3, 100, device=device)
-    x_sec = torch.randn(10, 3, 50, device=device)
     x_pri = torch.randn(10, 3, 10, device=device)
-    x = [x_det, x_pri, x_sec]
+    x_sec = torch.randn(10, 3, 50, device=device)
+    x_det = torch.randn(10, 3, 100, device=device)
+    x = [x_pri, x_sec, x_det]
     encoder = MultiResolutionEncoder(latent_dim=1920)
     out = encoder(x)
 
