@@ -5,6 +5,9 @@ from pytorch3d.loss import chamfer_distance
 from tensorboardX import SummaryWriter
 import numpy as np
 from tqdm import tqdm
+import os
+import datetime
+from data import *
 from module import *
 from model import *
 from decoder import Discriminator
@@ -111,12 +114,36 @@ if __name__ == "__main__":
     # get options
     parser = make_parser()
     args = parser.parse_args()
+
+    # make path of save params
+    dt_now = datetime.datetime.now()
+    save_date = str(dt_now.month) + str(dt_now.day) + "-" + str(dt_now.hour) + "-" + str(dt_now.minute)
+    save_dir = os.path.join(args.save_dir, args.subset, str(dt_now.year), save_date)
+    save_normal_path = os.path.join(save_dir, "normal_weight.tar")
+    save_best_path = os.path.join(save_dir, "best_weight.tar")
+    os.mkdir(save_dir)
+    # make condition file
+    with open(os.path.join(save_dir, "conditions.txt"), 'w') as f:
+        f.write('')
+
+    writter = SummaryWriter()
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # make dataloader
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
+    # make dataloader
+    # training data
+    train_dataset = MakeDataset(dataset_path=args.dataset_dir, subset=args.subset,
+                                eval="train", num_partial_pattern=4, device=args.device)
+    train_dataloader = DataLoader(dataset=train_dataset, batch_size=args.batch_size,
+                                  shuffle=True, drop_last=True,
+                                  collate_fn=OriginalCollate(args.num_partial_points, args.num_comp_points, args.device)) # DataLoader is iterable object.
+    # validation data
+    val_dataset = MakeDataset(dataset_path=args.dataset_dir, subset=args.subset,
+                              eval="val", num_partial_pattern=4, device=args.device)
+    val_dataloader = DataLoader(dataset=val_dataset, batch_size=2, shuffle=True,
+                                drop_last=True, collate_fn=OriginalCollate(args.num_partial_points, args.num_comp_points, args.device))
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # prepare model and optimaizer
     model_G = PFNet(latent_dim=args.latent_dim, final_num_points=args.final_num_points).to(args.device)
@@ -133,8 +160,6 @@ if __name__ == "__main__":
     if args.lr_schdualer:
         lr_schdualer_G = torch.optim.lr_scheduler.StepLR(optim_G, step_size=int(args.epochs/4), gamma=0.2)
         lr_schdualer_D = torch.optim.lr_scheduler.StepLR(optim_D, step_size=int(args.epochs/4), gamma=0.2)
-
-    writter = SummaryWriter()
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # main loop
     best_loss = np.inf
@@ -152,3 +177,35 @@ if __name__ == "__main__":
         # get loss
         loss_D, loss_G, train_loss = train_one_epoch(model_G, model_D, train_dataloader,
                                                      alpha1, alpha2, optim_D, optim_G, criterion)
+        val_loss = val_one_epoch(model_G, val_dataloader)
+
+        writter.add_scalar("D_loss", loss_D, epoch)
+        writter.add_scalar("G_loss", loss_G, epoch)
+        writter.add_scalar("train_loss", train_loss, epoch)
+        writter.add_scalar("validation_loss", val_loss, epoch)
+
+        if val_loss < best_loss:
+            best_loss = val_loss
+            torch.save({
+                        'epoch':epoch,
+                        'model_G_state_dict':model_G.state_dict(), 
+                        'model_D_state_dict':model_D.state_dict(), 
+                        'optimizer_G_state_dict':optim_G.state_dict(),
+                        'optimizer_D_state_dict':optim_D.state_dict(),
+                        'loss':best_loss
+                        }, save_best_path)
+
+        # save normal weight 
+        torch.save({
+                    'epoch':epoch,
+                    'model_G_state_dict':model_G.state_dict(), 
+                    'model_D_state_dict':model_D.state_dict(), 
+                    'optimizer_G_state_dict':optim_G.state_dict(),
+                    'optimizer_D_state_dict':optim_D.state_dict(),
+                    'loss':val_loss
+                    }, save_normal_path)
+        # lr_schdual.step()
+
+    # close writter
+    writter.close()
+
