@@ -12,6 +12,7 @@ class OriginalCollate():
     def __init__(self, num_partial, num_comp, device):
         self.num_partial = num_partial
         self.num_comp = num_comp
+        self.num_diff = self.num_comp - self.num_partial
         self.device = device
 
     def __call__(self, batch_list):
@@ -29,10 +30,26 @@ class OriginalCollate():
         # * in *batch_list makes transpose of batch_list
         # There are as many tensors as there are batchsize in batch_list
         # comp_batch and partial_batch are tuple which include many tensors
-        comp_batch, partial_batch, a, b, c, d = list(zip(*batch_list))
+        diff_batch, comp_batch, partial_batch, a, b, c, d, e, f = list(zip(*batch_list))
+        diff_batch = list(diff_batch)
         comp_batch = list(comp_batch)
         partial_batch = list(partial_batch)
 
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # transform tuple of complete point cloud to tensor
+        # num of point in each tensor of partial point cloud change to the same num
+        for i in range(batch_size):
+            n = len(diff_batch[i])
+            idx = np.random.permutation(n)
+            if len(idx) < self.num_diff:
+                temp = np.random.randint(0, n, size=(self.num_diff - n))
+                idx = np.concatenate([idx, temp])
+            diff_batch[i] = diff_batch[i][idx[:self.num_diff], :]
+
+        # torch.stack concatenate each tensors in the direction of the specified dim(dim=0)
+        diff_batch = torch.stack(diff_batch, dim=0).to(self.device)
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # transform tuple of complete point cloud to tensor
         # num of point in each tensor of partial point cloud change to the same num
         for i in range(batch_size):
@@ -46,6 +63,7 @@ class OriginalCollate():
         # torch.stack concatenate each tensors in the direction of the specified dim(dim=0)
         comp_batch = torch.stack(comp_batch, dim=0).to(self.device)
 
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # transform tuple of partial point cloud to tensor
         # num of point in each tensor of partial point cloud change to the same num
         for i in range(batch_size):
@@ -62,8 +80,10 @@ class OriginalCollate():
         b = np.array(list(b))
         c = np.array(list(c))
         d = np.array(list(d))
+        e = np.array(list(e))
+        f = np.array(list(f))
         # There are tensor which is board on args.device(default is cuda).
-        return comp_batch, partial_batch, a, b, c, d
+        return diff_batch, comp_batch, partial_batch, a, b, c, d, e, f
 # ----------------------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------------------
@@ -122,6 +142,7 @@ class MakeDataset(Dataset):
         so you need to expand the array of dataet.
         In this case, I expand the path array of complete point cloud dataet.
         '''
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         data_comp_list = self.data_list[subset_index][self.eval]
         data_comp_list = np.array(data_comp_list, dtype=str)
 
@@ -131,6 +152,17 @@ class MakeDataset(Dataset):
         data_comp_path = os.path.join(self.dataset_path, self.eval, "complete", subset_id)
         data_comp_path = os.path.join(data_comp_path, data_comp_list[index]+self.ext)
 
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        data_diff_list = self.data_list[subset_index][self.eval]
+        data_diff_list = np.array(data_diff_list, dtype=str)
+
+        if self.num_partial_pattern != 0: # when there are some patterns of partial data, repeat array.
+            data_diff_list = np.repeat(data_diff_list, self.num_partial_pattern)
+
+        data_diff_path = os.path.join(self.dataset_path, self.eval, "diff_comp_partial", subset_id)
+        data_diff_path = os.path.join(data_diff_path, data_diff_list[index]+self.ext)
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # make dataset path of partial point cloud
         partial_dir = self.data_list[subset_index][self.eval]
         data_partial_list = []
@@ -144,18 +176,18 @@ class MakeDataset(Dataset):
         data_partial_path = os.path.join(self.dataset_path, self.eval, "partial", subset_id)
         data_partial_path = os.path.join(data_partial_path, data_partial_list[index]+self.ext)
 
-        # ///
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # get tensor from path
+        diff_pc = o3d.io.read_point_cloud(data_diff_path)
         comp_pc = o3d.io.read_point_cloud(data_comp_path)
         partial_pc = o3d.io.read_point_cloud(data_partial_path)
-        comp_pc_visu = comp_pc # if you want to visualize data, input this to open3d.visualization
-        partial_pc_visu = partial_pc # if you want to visualize data, input this to open3d.visualization
+        diff_pc = np.array(diff_pc.points)
         comp_pc = np.array(comp_pc.points)
         partial_pc = np.array(partial_pc.points)
 
-        # get the point cloud not coverd by A and B
-        comp_pc = np.concatenate([comp_pc, partial_pc], axis=0)
-        comp_pc = np.unique(comp_pc, axis=0)
+        # diff between comp and partial point cloud
+        diff_pc, diff_max, diff_min = self.transform(diff_pc)
+        diff_pc = torch.tensor(diff_pc, dtype=torch.float, device=self.device)
 
         # complete point cloud
         comp_pc, comp_max, comp_min = self.transform(comp_pc)
@@ -165,9 +197,7 @@ class MakeDataset(Dataset):
         partial_pc, partial_max, partial_min = self.transform(partial_pc)
         partial_pc = torch.tensor(partial_pc, dtype=torch.float, device=self.device)
 
-        return comp_pc, partial_pc, comp_max, comp_min, partial_max, partial_min
-        # return comp_pc, partial_pc, comp_pc_visu, partial_pc_visu # use this if you want to visualize point cloud
-        # return data_comp_path , data_partial_path # use this if you want to check in your pc which don't have cuda.
+        return diff_pc, comp_pc, partial_pc, diff_max, diff_min, comp_max, comp_min, partial_max, partial_min
 
     def get_item_from_json(self):
         # read json file
@@ -187,9 +217,9 @@ class MakeDataset(Dataset):
 # ----------------------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    pc_dataset = MakeDataset("./data/BridgeCompletion", "bridge", "train", 4, "cuda")
+    pc_dataset = MakeDataset("./../PCN/data/BridgeCompletion", "bridge", "train", 4, "cuda")
     # i = 46000
-    i = 2
+    i = 0
     print(pc_dataset[0][i].min())
     print(pc_dataset[0][i].max())
     print(pc_dataset[10][i].shape)

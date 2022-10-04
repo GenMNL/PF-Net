@@ -29,13 +29,13 @@ def train_one_epoch(model_G, model_D, dataloader, alpha1, alpha2, optim_D, optim
     count = 0
 
     for i, points in enumerate(tqdm(dataloader, desc="train")):
-        comp = points[0]
-        partial = points[1]
+        diff = points[0]
+        partial = points[2]
 
         # get 3 resolution partial point cloud list
-        input_pri_idx = farthest_point_sampling(partial, 1000)
+        input_pri_idx = farthest_point_sampling(partial, 500)
         input_pri = index2point_converter(partial, input_pri_idx)
-        input_sec_idx = farthest_point_sampling(partial, 2000)
+        input_sec_idx = farthest_point_sampling(partial, 1000)
         input_sec = index2point_converter(partial, input_sec_idx)
         input_det = partial.clone().detach()
         input_list = [input_pri, input_sec, input_det]
@@ -45,7 +45,7 @@ def train_one_epoch(model_G, model_D, dataloader, alpha1, alpha2, optim_D, optim
 
         # optim D
         # Get D result of real data
-        D_prediction_real = model_D(comp)
+        D_prediction_real = model_D(diff)
         loss_D_real = criterion(D_prediction_real, real_label)
         # Get D result of fake data
         D_prediction_fake = model_D(pre_det)
@@ -57,9 +57,9 @@ def train_one_epoch(model_G, model_D, dataloader, alpha1, alpha2, optim_D, optim
         optim_D.step()
 
         # optim G using chamfer distance
-        CD_pri = chamfer_distance(pre_pri, comp)
-        CD_sec = chamfer_distance(pre_sec, comp)
-        CD_det = chamfer_distance(pre_det, comp)
+        CD_pri = chamfer_distance(pre_pri, diff)
+        CD_sec = chamfer_distance(pre_sec, diff)
+        CD_det = chamfer_distance(pre_det, diff)
         CD_loss = CD_det[0] + alpha1*CD_sec[0] + alpha2*CD_pri[0]
         # backward
         loss_G = (1 - args.weight_G_loss)*loss_D_fake + args.weight_G_loss*CD_loss
@@ -78,21 +78,19 @@ def train_one_epoch(model_G, model_D, dataloader, alpha1, alpha2, optim_D, optim
     return sum_loss_D, sum_loss_G, sum_loss
 
 def val_one_epoch(model_G, dataloader):
-    device = model_G.device
-
     model_D.eval()
 
     val_loss = 0.0
     count = 0
     with torch.no_grad():
         for i, points in enumerate(dataloader):
-            comp = points[0]
-            partial = points[1]
+            diff = points[0]
+            partial = points[2]
 
             # get 3 resolution partial point cloud list
-            input_pri_idx = farthest_point_sampling(partial, 1000)
+            input_pri_idx = farthest_point_sampling(partial, 500)
             input_pri = index2point_converter(partial, input_pri_idx)
-            input_sec_idx = farthest_point_sampling(partial, 2000)
+            input_sec_idx = farthest_point_sampling(partial, 1000)
             input_sec = index2point_converter(partial, input_sec_idx)
             input_det = partial.clone().detach()
             input_list = [input_pri, input_sec, input_det]
@@ -100,7 +98,7 @@ def val_one_epoch(model_G, dataloader):
             # get prediction
             _, _, pre_det = model_G(input_list)
             # get chanmfer distance loss
-            CD_loss = chamfer_distance(pre_det, comp)
+            CD_loss = chamfer_distance(pre_det, diff)
             val_loss += CD_loss
 
     val_loss /= count
@@ -127,10 +125,6 @@ if __name__ == "__main__":
         f.write('')
 
     writter = SummaryWriter()
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # make dataloader
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # make dataloader
     # training data
