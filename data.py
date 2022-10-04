@@ -33,9 +33,6 @@ class OriginalCollate():
         comp_batch = list(comp_batch)
         partial_batch = list(partial_batch)
 
-        for i in range(batch_size):
-            com
-
         # transform tuple of complete point cloud to tensor
         # num of point in each tensor of partial point cloud change to the same num
         for i in range(batch_size):
