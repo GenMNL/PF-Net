@@ -5,7 +5,7 @@ def make_parser():
     parser = argparse.ArgumentParser(description="options of PCN")
 
     # make parser for train (part of this is used for test)
-    parser.add_argument("--final_num_points", default=16384, type=int)
+    parser.add_argument("--final_num_points", default=12384, type=int)
     parser.add_argument("--num_comp_points", default=16384, type=int)
     parser.add_argument("--num_partial_points", default=4000, type=int)
     parser.add_argument("--latent_dim", default=1920, type=int)

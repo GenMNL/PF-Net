@@ -24,10 +24,14 @@ class MultiResolutionEncoder(nn.Module):
             feature = self.CMLP[i](x[i]) # (B, latent_dim, 1)
             features.append(feature)
 
-        x = torch.concat(features, dim=2) # (B, latent_dim, 3)
+        x = torch.cat(features, dim=2) # (B, latent_dim, 3)
         x = x.transpose(1, 2).contiguous() # (B, 3, latent_dim)
         encode_result = self.MLP(x) # (B, 1, latent_dim)
         encode_result = encode_result.view(-1, self.latent_dim)
+
+        nan_ = torch.isinf(encode_result)
+        nan_detect = torch.zeros(encode_result.shape, device="cuda")
+        print(nan_detect[nan_])
 
         return encode_result
 
@@ -65,7 +69,7 @@ class CombinedMLP(nn.Module):
         feature_512 = torch.max(x_512, dim=2, keepdim=True)[0]
         feature_1024 = torch.max(x_1024, dim=2, keepdim=True)[0]
 
-        feature = torch.concat([feature_128,
+        feature = torch.cat([feature_128,
                                 feature_256,
                                 feature_512,
                                 feature_1024], dim=1)
@@ -73,12 +77,12 @@ class CombinedMLP(nn.Module):
         return feature
 
 if __name__=="__main__":
-    device = "cpu"
-    x_pri = torch.randn(10, 3, 10, device=device)
-    x_sec = torch.randn(10, 3, 50, device=device)
-    x_det = torch.randn(10, 3, 100, device=device)
+    device = "cuda"
+    x_pri = torch.randn(10, 3, 400, device=device)
+    x_sec = torch.randn(10, 3, 800, device=device)
+    x_det = torch.randn(10, 3, 4000, device=device)
     x = [x_pri, x_sec, x_det]
-    encoder = MultiResolutionEncoder(latent_dim=1920)
+    encoder = MultiResolutionEncoder(latent_dim=1920).to(device)
     out = encoder(x)
 
     print(out.shape)

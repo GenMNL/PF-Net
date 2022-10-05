@@ -29,12 +29,12 @@ class PFNet(nn.Module):
 
 # ----------------------------------------------------------------------------------------
 if __name__=="__main__":
-    device = 'cpu'
-    x_det = torch.randn(10, 3, 1000, device=device)
-    x_sec = torch.randn(10, 3, 500, device=device)
-    x_pri = torch.randn(10, 3, 100, device=device)
+    device = 'cuda'
+    x_det = torch.randn(10, 3, 4000, device=device)
+    x_sec = torch.randn(10, 3, 800, device=device)
+    x_pri = torch.randn(10, 3, 400, device=device)
     x = [x_pri, x_sec, x_det]
 
-    model = PFNet(1924, 2000)
+    model = PFNet(1924, 12384).to(device)
     out_pri, out_sec, out_det= model(x)
     print(out_det.shape)

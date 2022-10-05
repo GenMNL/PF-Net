@@ -15,7 +15,7 @@ from options import *
 
 # ----------------------------------------------------------------------------------------
 def train_one_epoch(model_G, model_D, dataloader, alpha1, alpha2, optim_D, optim_G, criterion):
-    device = model_G.device
+    device = args.device
 
     model_G.train()
     model_D.train()
@@ -30,40 +30,45 @@ def train_one_epoch(model_G, model_D, dataloader, alpha1, alpha2, optim_D, optim
 
     for i, points in enumerate(tqdm(dataloader, desc="train")):
         diff = points[0]
-        partial = points[2]
+        partial = points[2].permute(0, 2, 1)
 
         # get 3 resolution partial point cloud list
-        input_pri_idx = farthest_point_sampling(partial, 500)
+        input_pri_idx = farthest_point_sampling(partial, 400)
         input_pri = index2point_converter(partial, input_pri_idx)
-        input_sec_idx = farthest_point_sampling(partial, 1000)
+        input_sec_idx = farthest_point_sampling(partial, 800)
         input_sec = index2point_converter(partial, input_sec_idx)
         input_det = partial.clone().detach()
         input_list = [input_pri, input_sec, input_det]
+        
 
         # get prediction of G
         pre_pri, pre_sec, pre_det = model_G(input_list)
 
         # optim D
+        model_D.zero_grad()
         # Get D result of real data
         D_prediction_real = model_D(diff)
         loss_D_real = criterion(D_prediction_real, real_label)
         # Get D result of fake data
-        D_prediction_fake = model_D(pre_det)
+        D_prediction_fake = model_D(pre_det.detach())
         loss_D_fake = criterion(D_prediction_fake, fake_label)
         # backward
         loss_D = loss_D_real + loss_D_fake
-        model_D.zero_grad()
         loss_D.backward()
         optim_D.step()
 
         # optim G using chamfer distance
+        model_G.zero_grad()
+        # cal chamfer distance
         CD_pri = chamfer_distance(pre_pri, diff)
         CD_sec = chamfer_distance(pre_sec, diff)
         CD_det = chamfer_distance(pre_det, diff)
         CD_loss = CD_det[0] + alpha1*CD_sec[0] + alpha2*CD_pri[0]
+        # get prediction of D
+        D_prediction_fake = model_D(pre_det)
+        loss_D_fake = criterion(D_prediction_fake, fake_label)
         # backward
         loss_G = (1 - args.weight_G_loss)*loss_D_fake + args.weight_G_loss*CD_loss
-        model_G.zero_grad()
         loss_G.backward()
         optim_G.step()
 
@@ -85,21 +90,22 @@ def val_one_epoch(model_G, dataloader):
     with torch.no_grad():
         for i, points in enumerate(dataloader):
             diff = points[0]
-            partial = points[2]
+            partial = points[2].permute(0, 2, 1)
 
             # get 3 resolution partial point cloud list
-            input_pri_idx = farthest_point_sampling(partial, 500)
+            input_pri_idx = farthest_point_sampling(partial, 400)
             input_pri = index2point_converter(partial, input_pri_idx)
-            input_sec_idx = farthest_point_sampling(partial, 1000)
+            input_sec_idx = farthest_point_sampling(partial, 800)
             input_sec = index2point_converter(partial, input_sec_idx)
             input_det = partial.clone().detach()
             input_list = [input_pri, input_sec, input_det]
 
             # get prediction
             _, _, pre_det = model_G(input_list)
+
             # get chanmfer distance loss
             CD_loss = chamfer_distance(pre_det, diff)
-            val_loss += CD_loss
+            val_loss += CD_loss[0]
 
     val_loss /= count
     return val_loss
@@ -151,13 +157,15 @@ if __name__ == "__main__":
         optim_G = torch.optim.SGD(model_G.parameters(), lr=args.lr, momentum=0.6)
         optim_D = torch.optim.SGD(model_D.parameters(), lr=args.lr, momentum=0.6)
 
-    if args.lr_schdualer:
+    if args.lr_schduler:
         lr_schdualer_G = torch.optim.lr_scheduler.StepLR(optim_G, step_size=int(args.epochs/4), gamma=0.2)
         lr_schdualer_D = torch.optim.lr_scheduler.StepLR(optim_D, step_size=int(args.epochs/4), gamma=0.2)
+
+    torch.autograd.set_detect_anomaly(True)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # main loop
     best_loss = np.inf
-    for epoch in tqdm(args.epochs, desc="main loop"):
+    for epoch in tqdm(range(1, args.epochs+1), desc="main loop"):
         if epoch < 30:
             alpha1 = 0.01
             alpha2 = 0.02

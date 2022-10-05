@@ -74,13 +74,12 @@ def index2point_converter(xyz, indices):
 
 # ----------------------------------------------------------------------------------------
 if __name__=="__main__":
-    device = 'cpu'
-    x = torch.randn(2, 3, 5, device=device)
+    device = 'cuda'
+    x = torch.randn(10, 4000, 3, device=device)
     # mlp = SharedMLP(3, 5)
     # out = mlp(x)
     # print(out.shape)
-    print(x)
-    out = farthest_point_sampling(x, 2)
-    print(out)
+    print(x.shape)
+    out = farthest_point_sampling(x, 1000)
     out = index2point_converter(x, out)
     print(out.shape)

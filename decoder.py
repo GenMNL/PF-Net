@@ -10,8 +10,10 @@ class PointPyramidDecoder(nn.Module):
         super(PointPyramidDecoder, self).__init__()
         self.latent_dim = latent_dim
         self.M = final_num_points
-        self.M2 = self.M//4
-        self.M1 = self.M2//2
+        self.M2 = self.M//32
+        self.M1 = self.M2//3
+        #self.M2 = 256
+        #self.M1 = 128
 
         # to obtain a latent vector for each scale
         self.fc1 = nn.Linear(self.latent_dim, 1024)
@@ -24,11 +26,18 @@ class PointPyramidDecoder(nn.Module):
         # secondary
         self.fc_sec = nn.Linear(512, self.M1*self.M2)
         self.conv_sec = nn.Conv1d(self.M2, int(3*self.M2/self.M1), 1)
-        # detail
-        self.fc_det = nn.Linear(1024, self.M*self.M2)
-        self.conv1_det = nn.Conv1d(self.M, self.M, 1)
-        self.conv2_det = nn.Conv1d(self.M, 256, 1)
+        # detail(original)
+        #self.fc_det = nn.Linear(1024, self.M*self.M2)
+        #self.conv1_det = nn.Conv1d(self.M, self.M, 1)
+        #self.conv2_det = nn.Conv1d(self.M, 256, 1)
+        #self.conv3_det = nn.Conv1d(256, int(3*self.M/self.M2), 1)
+
+        # detail(change to solve error)
+        self.fc_det = nn.Linear(1024, self.M2)
+        self.conv1_det = nn.Conv1d(1, 64, 1)
+        self.conv2_det = nn.Conv1d(64, 256, 1)
         self.conv3_det = nn.Conv1d(256, int(3*self.M/self.M2), 1)
+
 
     def forward(self, x):
         """decoder to get completion result
@@ -44,16 +53,17 @@ class PointPyramidDecoder(nn.Module):
         x_sec = F.relu(self.fc2(x_det)) # (B, 512)
         x_pri = F.relu(self.fc3(x_sec)) # (B, 256)
 
-        x_det = F.relu(self.fc_det(x_det)) # (B, self.M*self.M2)
-        x_sec = F.relu(self.fc_sec(x_sec)) # (B, self.M1*self.M2)
-        x_pri = self.fc_pri(x_pri) # (B, 3*self.M)
+        #out = self.conv_test(x_det)
+
 
         # get prediction of each scale
         # primary
+        x_pri = self.fc_pri(x_pri) # (B, 3*self.M)
         out_pri = x_pri.view(-1, self.M1, 3)
         out_pri_expnad = torch.unsqueeze(out_pri, dim=2)
 
         # secondary
+        x_sec = F.relu(self.fc_sec(x_sec)) # (B, self.M1*self.M2)
         out_sec = x_sec.view(-1, self.M2, self.M1)
         out_sec = self.conv_sec(out_sec)
         out_sec = out_sec.view(-1, self.M1, int(self.M2/self.M1), 3)
@@ -61,8 +71,19 @@ class PointPyramidDecoder(nn.Module):
         out_sec = out_sec.view(-1, self.M2, 3)
         out_sec_expand = torch.unsqueeze(out_sec, dim=2)
 
-        # finary
-        out_det = x_det.view(-1, self.M, self.M2)
+        # finary(original)
+        #x_det = F.relu(self.fc_det(x_det)) # (B, self.M*self.M2)
+        #out_det = x_det.view(-1, self.M, self.M2)
+        #out_det = F.relu(self.conv1_det(out_det))
+        #out_det = F.relu(self.conv2_det(out_det))
+        #out_det = self.conv3_det(out_det)
+        #out_det = out_det.view(-1, self.M2, int(self.M/self.M2), 3)
+        #out_det = out_det + out_sec_expand
+        #out_det = out_det.view(-1, self.M, 3)
+
+        # finary(change to solve error)
+        x_det = F.relu(self.fc_det(x_det)) # (B, self.M*self.M2)
+        out_det = torch.unsqueeze(x_det, dim=1)
         out_det = F.relu(self.conv1_det(out_det))
         out_det = F.relu(self.conv2_det(out_det))
         out_det = self.conv3_det(out_det)
@@ -144,7 +165,7 @@ class CombinedMLP(nn.Module):
 if __name__ == "__main__":
     device = "cpu"
     x = torch.randn(10, 1920, device=device)
-    decoder = PointPyramidDecoder(latent_dim=1920, final_num_points=512)
+    decoder = PointPyramidDecoder(latent_dim=1920, final_num_points=12384)
     pri, sec, det = decoder(x)
 
     print(pri.shape)
