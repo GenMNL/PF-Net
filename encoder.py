@@ -1,27 +1,37 @@
 import torch
 import torch.nn as nn
 from module import SharedMLP
+from stn import *
 
 class MultiResolutionEncoder(nn.Module):
     def __init__(self, latent_dim):
         super(MultiResolutionEncoder, self).__init__()
         self.latent_dim = latent_dim
 
-        self.CMLP = nn.ModuleList([CombinedMLP(3, self.latent_dim) for _ in range(3)])
+        self.CMLP_det = CombinedMLP(3, self.latent_dim)
+        self.CMLP = nn.ModuleList([CombinedMLP(3, self.latent_dim) for _ in range(2)])
         self.MLP = SharedMLP(3, 1)
 
     def forward(self, x):
         """Encoder
 
         Args:
-            x (list): [xyz_pri, xyz_sec, xyz_det] (permutation invariance)
+            x (list): [xyz_pri, xyz_sec, xyz_det]
 
         Returns:
             tensor: latent vector (B, latent_dim)
         """
-        features = []
-        for i in range(3):
-            feature = self.CMLP[i](x[i]) # (B, latent_dim, 1)
+        x_det = x[2]
+        feature, trans_3d = self.CMLP_det(x_det, 2)
+        trans_PriSec = trans_3d.clone().detach()
+        features = [feature]
+        for i in range(2):
+            # apply stn got in det CMLP
+            x_PriSec = x[i].permute(0, 2, 1)
+            trans_x = torch.bmm(x_PriSec, trans_PriSec)
+            trans_x = trans_x.permute(0, 2, 1)
+
+            feature = self.CMLP[i](trans_x, i) # (B, latent_dim, 1)
             features.append(feature)
 
         x = torch.cat(features, dim=2) # (B, latent_dim, 3)
@@ -29,11 +39,7 @@ class MultiResolutionEncoder(nn.Module):
         encode_result = self.MLP(x) # (B, 1, latent_dim)
         encode_result = encode_result.view(-1, self.latent_dim)
 
-        nan_ = torch.isinf(encode_result)
-        nan_detect = torch.zeros(encode_result.shape, device="cuda")
-        print(nan_detect[nan_])
-
-        return encode_result
+        return encode_result, trans_PriSec
 
 
 class CombinedMLP(nn.Module):
@@ -41,6 +47,7 @@ class CombinedMLP(nn.Module):
         super(CombinedMLP, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
+        self.STN3d = STNkd(3)
         self.MLP1 = nn.Sequential(
             SharedMLP(self.in_channels, 64),
             SharedMLP(64, 64),
@@ -50,7 +57,7 @@ class CombinedMLP(nn.Module):
         self.MLP3 = SharedMLP(256, 512)
         self.MLP4 = SharedMLP(512, self.out_channels - (128+256+512))
 
-    def forward(self, x):
+    def forward(self, x, id):
         """Combined Shared MLP
 
         Args:
@@ -59,6 +66,13 @@ class CombinedMLP(nn.Module):
         Returns:
             tensor: feature vector(B, latent_dim, 1)
         """
+        if id == 2:
+            # apply first stn
+            trans_3d = self.STN3d(x)
+            x = x.permute(0, 2, 1)
+            x = torch.bmm(x, trans_3d)
+            x = x.permute(0, 2, 1)
+
         x_128 = self.MLP1(x)
         x_256 = self.MLP2(x_128)
         x_512 = self.MLP3(x_256)
@@ -70,11 +84,13 @@ class CombinedMLP(nn.Module):
         feature_1024 = torch.max(x_1024, dim=2, keepdim=True)[0]
 
         feature = torch.cat([feature_128,
-                                feature_256,
-                                feature_512,
-                                feature_1024], dim=1)
-
-        return feature
+                             feature_256,
+                             feature_512,
+                             feature_1024], dim=1)
+        if id == 2:
+            return feature, trans_3d
+        else:
+            return feature
 
 if __name__=="__main__":
     device = "cuda"
@@ -83,6 +99,7 @@ if __name__=="__main__":
     x_det = torch.randn(10, 3, 4000, device=device)
     x = [x_pri, x_sec, x_det]
     encoder = MultiResolutionEncoder(latent_dim=1920).to(device)
-    out = encoder(x)
+    out, trans = encoder(x)
 
     print(out.shape)
+    print(trans.shape)

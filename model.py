@@ -21,10 +21,10 @@ class PFNet(nn.Module):
         Returns:
             3 resolution result: (B, 3, num_pri), (B, 3, num_sec), (B, 3, num_det)
         """
-        feature_v = self.Encoder(x)
+        feature_v, trans_3d = self.Encoder(x)
         out_pri, out_sec, out_det = self.Decoder(feature_v)
 
-        return out_pri, out_sec, out_det
+        return out_pri, out_sec, out_det, trans_3d
 
 
 # ----------------------------------------------------------------------------------------

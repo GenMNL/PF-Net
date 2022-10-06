@@ -10,8 +10,8 @@ class PointPyramidDecoder(nn.Module):
         super(PointPyramidDecoder, self).__init__()
         self.latent_dim = latent_dim
         self.M = final_num_points
-        self.M2 = self.M//32
-        self.M1 = self.M2//3
+        self.M2 = self.M//16
+        self.M1 = self.M2//2
         #self.M2 = 256
         #self.M1 = 128
 

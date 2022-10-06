@@ -217,11 +217,12 @@ class MakeDataset(Dataset):
 # ----------------------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    pc_dataset = MakeDataset("./../PCN/data/BridgeCompletion", "bridge", "train", 4, "cuda")
+    pc_dataset = MakeDataset("./../PCN/data/BridgeCompletion", "bridge", "test", 1, "cuda")
     # i = 46000
     i = 0
-    print(pc_dataset[0][i].min())
-    print(pc_dataset[0][i].max())
-    print(pc_dataset[10][i].shape)
+    # print(pc_dataset[0][i].min())
+    # print(pc_dataset[0][i].max())
+    print(len(pc_dataset))
+    print(pc_dataset[1][i].shape)
 
     # o3d.visualization.draw_geometries([pc_dataset[7][3]])
