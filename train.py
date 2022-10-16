@@ -44,7 +44,7 @@ def train_one_epoch(model_G, model_D, dataloader, alpha1, alpha2, optim_D, optim
         # get prediction of G
         pre_pri, pre_sec, pre_det, trans_3d = model_G(input_list)
 
-        diff = torch.bmm(diff, trans_3d)
+        #diff = torch.bmm(diff, trans_3d)
 
         # optim D
         model_D.zero_grad()
@@ -105,7 +105,7 @@ def val_one_epoch(model_G, dataloader):
             # get prediction
             _, _, pre_det, trans_3d = model_G(input_list)
 
-            diff = torch.bmm(diff, trans_3d)
+            # diff = torch.bmm(diff, trans_3d)
 
             # get chanmfer distance loss
             CD_loss = chamfer_distance(pre_det, diff)

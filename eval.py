@@ -52,7 +52,7 @@ def test(model_G, dataloader, save_dir):
             input_list = [input_pri, input_sec, input_det]
 
             # get prediction
-            _, _, pre_det = model_G(input_list)
+            _, _, pre_det, trans_3d = model_G(input_list)
 
             # get chanmfer distance loss
             # CD_loss = chamfer_distance(pre_comp, comp)
