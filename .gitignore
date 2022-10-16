@@ -1,6 +1,7 @@
 # my setting
 checkpoint/
 runs/
+*.ply
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
