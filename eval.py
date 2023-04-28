@@ -4,10 +4,11 @@ from torch.utils.data import DataLoader
 import numpy as np
 from pytorch3d.loss import chamfer_distance
 import os
-from data import *
-from module import *
-from model import *
-from options import *
+import open3d as o3d
+from utils.data import MakeDataset, OriginalCollate
+from models.module import *
+from models.model import PFNet
+from utils.options import make_parser
 # ----------------------------------------------------------------------------------------
 # make function
 # ----------------------------------------------------------------------------------------
@@ -101,7 +102,7 @@ if __name__ == "__main__":
     test_dataset = MakeDataset(dataset_path=args.dataset_dir, subset=args.subset,
                                 eval="test", num_partial_pattern=0, device=args.device)
     test_dataloader = DataLoader(dataset=test_dataset, batch_size=1,
-                                  collate_fn=OriginalCollate(args.num_partial_points, args.num_comp_points, args.device)) # DataLoader is iterable object.
+                                  collate_fn=OriginalCollate(args.device)) # DataLoader is iterable object.
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # prepare model and optimaizer
     model_G = PFNet(latent_dim=args.latent_dim, final_num_points=args.final_num_points).to(args.device)

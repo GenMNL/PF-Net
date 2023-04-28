@@ -7,11 +7,11 @@ import numpy as np
 from tqdm import tqdm
 import os
 import datetime
-from data import *
-from module import *
-from model import *
-from decoder import Discriminator
-from options import *
+from utils.data import *
+from models.module import *
+from models.model import PFNet
+from models.decoder import Discriminator
+from utils.options import *
 
 # ----------------------------------------------------------------------------------------
 def train_one_epoch(model_G, model_D, dataloader, alpha1, alpha2, optim_D, optim_G, criterion):
@@ -28,7 +28,7 @@ def train_one_epoch(model_G, model_D, dataloader, alpha1, alpha2, optim_D, optim
     sum_loss = 0.0
     count = 0
 
-    for i, points in enumerate(tqdm(dataloader, desc="train")):
+    for _, points in enumerate(tqdm(dataloader, desc="train")):
         diff = points[0]
         partial = points[2].permute(0, 2, 1)
 
@@ -40,11 +40,11 @@ def train_one_epoch(model_G, model_D, dataloader, alpha1, alpha2, optim_D, optim
         input_det = partial.clone().detach()
         input_list = [input_pri, input_sec, input_det]
         
-
         # get prediction of G
-        pre_pri, pre_sec, pre_det, trans_3d = model_G(input_list)
+        # pre_pri, pre_sec, pre_det, trans_3d = model_G(input_list)
+        pre_pri, pre_sec, pre_det = model_G(input_list)
 
-        #diff = torch.bmm(diff, trans_3d)
+        # diff = torch.bmm(diff, trans_3d)
 
         # optim D
         model_D.zero_grad()
@@ -103,7 +103,8 @@ def val_one_epoch(model_G, dataloader):
             input_list = [input_pri, input_sec, input_det]
 
             # get prediction
-            _, _, pre_det, trans_3d = model_G(input_list)
+            # _, _, pre_det, trans_3d = model_G(input_list)
+            _, _, pre_det = model_G(input_list)
 
             # diff = torch.bmm(diff, trans_3d)
 
@@ -144,12 +145,12 @@ if __name__ == "__main__":
                                 eval="train", num_partial_pattern=4, device=args.device)
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=args.batch_size,
                                   shuffle=True, drop_last=True,
-                                  collate_fn=OriginalCollate(args.num_partial_points, args.num_comp_points, args.device)) # DataLoader is iterable object.
+                                  collate_fn=OriginalCollate(args.device)) # DataLoader is iterable object.
     # validation data
     val_dataset = MakeDataset(dataset_path=args.dataset_dir, subset=args.subset,
                               eval="val", num_partial_pattern=4, device=args.device)
     val_dataloader = DataLoader(dataset=val_dataset, batch_size=2, shuffle=True,
-                                drop_last=True, collate_fn=OriginalCollate(args.num_partial_points, args.num_comp_points, args.device))
+                                drop_last=True, collate_fn=OriginalCollate(args.device))
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # prepare model and optimaizer
     model_G = PFNet(latent_dim=args.latent_dim, final_num_points=args.final_num_points).to(args.device)

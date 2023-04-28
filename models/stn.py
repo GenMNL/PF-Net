@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import numpy as np
-from module import *
+from models.module import *
 
 class STNkd(nn.Module):
     def __init__(self, num_channels):

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from module import SharedMLP
-from stn import *
+from models.module import SharedMLP
+from models.stn import *
 
 class MultiResolutionEncoder(nn.Module):
     def __init__(self, latent_dim):
@@ -17,21 +17,23 @@ class MultiResolutionEncoder(nn.Module):
 
         Args:
             x (list): [xyz_pri, xyz_sec, xyz_det]
-
         Returns:
             tensor: latent vector (B, latent_dim)
         """
         x_det = x[2]
-        feature, trans_3d = self.CMLP_det(x_det, 2)
-        trans_PriSec = trans_3d.clone().detach()
+        # feature, trans_3d = self.CMLP_det(x_det, 2)
+        feature = self.CMLP_det(x_det, 1)
+        # trans_PriSec = trans_3d.clone().detach()
         features = [feature]
         for i in range(2):
-            # apply stn got in det CMLP
             x_PriSec = x[i].permute(0, 2, 1)
-            trans_x = torch.bmm(x_PriSec, trans_PriSec)
-            trans_x = trans_x.permute(0, 2, 1)
 
-            feature = self.CMLP[i](trans_x, i) # (B, latent_dim, 1)
+            # apply stn got in det CMLP
+            # trans_x = torch.bmm(x_PriSec, trans_PriSec)
+            # trans_x = trans_x.permute(0, 2, 1)
+            # feature = self.CMLP[i](trans_x, i) # (B, latent_dim, 1)
+
+            feature = self.CMLP[i](x_PriSec, i) # (B, latent_dim, 1)
             features.append(feature)
 
         x = torch.cat(features, dim=2) # (B, latent_dim, 3)
@@ -39,7 +41,8 @@ class MultiResolutionEncoder(nn.Module):
         encode_result = self.MLP(x) # (B, 1, latent_dim)
         encode_result = encode_result.view(-1, self.latent_dim)
 
-        return encode_result, trans_PriSec
+        # return encode_result, trans_PriSec
+        return encode_result
 
 
 class CombinedMLP(nn.Module):
@@ -62,7 +65,6 @@ class CombinedMLP(nn.Module):
 
         Args:
             x (tensor): (B, C, N)
-
         Returns:
             tensor: feature vector(B, latent_dim, 1)
         """
