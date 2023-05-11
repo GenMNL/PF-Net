@@ -26,7 +26,7 @@ class MultiResolutionEncoder(nn.Module):
         # trans_PriSec = trans_3d.clone().detach()
         features = [feature]
         for i in range(2):
-            x_PriSec = x[i].permute(0, 2, 1)
+            x_PriSec = x[i]
 
             # apply stn got in det CMLP
             # trans_x = torch.bmm(x_PriSec, trans_PriSec)

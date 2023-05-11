@@ -157,7 +157,7 @@ class MakeDataset(Dataset):
         self.data_list = json.load(read_json)
 
         if self.subset == "all":
-            data_comp_path, data_partial_path = self.get_path_from_all_subset(index)
+            data_comp_path, data_partial_path, data_diff_path = self.get_path_from_all_subset(index)
         else:
             data_comp_path, data_partial_path = self.get_path_from_one_subset(index)
 
@@ -172,13 +172,8 @@ class MakeDataset(Dataset):
         partial_pc = o3d.io.read_point_cloud(data_partial_path)
         partial_pc = np.array(partial_pc.points)
         # diffrence between comp and partial
-        diff_pc = comp_pc.copy()
-        for i in range(len(partial_pc)):
-            diff_each_point = diff_pc - partial_pc[i, :]
-            diff_each_point = np.square(np.sum(diff_each_point, axis=1))
-
-            index = np.where(diff_each_point > 5e-10)
-            diff_pc = diff_pc[index[0], :]
+        diff_pc = o3d.io.read_point_cloud(data_diff_path)
+        diff_pc = np.array(diff_pc.points)
 
         partial_pc, partial_max, partial_min = self.transform(partial_pc)
         partial_pc = torch.tensor(partial_pc, dtype=torch.float, device=self.device)
@@ -212,13 +207,17 @@ class MakeDataset(Dataset):
 
         # make dataset path of partial point cloud
         data_partial_list = []
+        data_diff_list = []
         for i in range(len(path_list)):
             for j in range(self.num_partial_pattern):
                 data_partial_list.append(f"{path_list[i]}/0{j}")
+                data_diff_list.append(f"{path_list[i]}/0{j}")
         data_partial_path = os.path.join(self.dataset_path, self.eval, "partial")
         data_partial_path = os.path.join(data_partial_path, subset_id, data_partial_list[index]+".pcd")
+        data_diff_path = os.path.join(self.dataset_path, self.eval, "diff")
+        data_diff_path = os.path.join(data_diff_path, subset_id, data_diff_list[index]+".ply")
 
-        return data_comp_path, data_partial_path
+        return data_comp_path, data_partial_path, data_diff_path
 
     def get_path_from_one_subset(self, index):
         # get the id and index of object which wants to train(or test)

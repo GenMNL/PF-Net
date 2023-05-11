@@ -53,7 +53,8 @@ def test(model_G, dataloader, save_dir):
             input_list = [input_pri, input_sec, input_det]
 
             # get prediction
-            _, _, pre_det, trans_3d = model_G(input_list)
+            # _, _, pre_det, trans_3d = model_G(input_list)
+            _, _, pre_det = model_G(input_list)
 
             # get chanmfer distance loss
             # CD_loss = chamfer_distance(pre_comp, comp)
@@ -100,16 +101,23 @@ if __name__ == "__main__":
     # make dataloader
     # training data
     test_dataset = MakeDataset(dataset_path=args.dataset_dir, subset=args.subset,
-                                eval="test", num_partial_pattern=0, device=args.device)
+                                eval="test", num_partial_pattern=1, device=args.device)
     test_dataloader = DataLoader(dataset=test_dataset, batch_size=1,
                                   collate_fn=OriginalCollate(args.device)) # DataLoader is iterable object.
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # prepare model and optimaizer
     model_G = PFNet(latent_dim=args.latent_dim, final_num_points=args.final_num_points).to(args.device)
-    pth_path = os.path.join(args.save_dir, args.result_subset, args.year, args.date, args.select_result + "_weight.tar")
+    tar_path = os.path.join(args.save_dir, "all", args.year, args.date, args.select_result + "_weight.tar")
 
-    checkpoint = torch.load(pth_path)
+    checkpoint = torch.load(tar_path)
     model_G.load_state_dict(checkpoint["model_G_state_dict"])
+
+    result_dir = 'result'
+    result_txt = os.path.join(result_dir, 'result.txt')
+    with open(result_txt, 'w') as f:
+        f.write('train_data: {}\n'.format(args.date))
+        f.write('epoch: {}\n'.format(checkpoint['epoch']))
+        f.write('loss : {}\n'.format(checkpoint['loss']))
 
     result_dir = os.path.join(args.result_dir, args.result_subset)
     test_loss = test(model_G, test_dataloader, result_dir)

@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-from models.module import *
-from encoder import *
-from decoder import *
+from models.encoder import MultiResolutionEncoder
+from models.decoder import PointPyramidDecoder
 
 class PFNet(nn.Module):
     def __init__(self, latent_dim, final_num_points):

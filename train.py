@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+import torch.multiprocessing as multiprocessing
 from pytorch3d.loss import chamfer_distance
 from tensorboardX import SummaryWriter
 import numpy as np
@@ -90,7 +91,7 @@ def val_one_epoch(model_G, dataloader):
     val_loss = 0.0
     count = 0
     with torch.no_grad():
-        for i, points in enumerate(dataloader):
+        for _, points in enumerate(tqdm(dataloader, desc="val")):
             diff = points[0]
             partial = points[2].permute(0, 2, 1)
 
@@ -144,13 +145,13 @@ if __name__ == "__main__":
     train_dataset = MakeDataset(dataset_path=args.dataset_dir, subset=args.subset,
                                 eval="train", num_partial_pattern=4, device=args.device)
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=args.batch_size,
-                                  shuffle=True, drop_last=True,
+                                  shuffle=True, drop_last=True, num_workers=4,
                                   collate_fn=OriginalCollate(args.device)) # DataLoader is iterable object.
     # validation data
     val_dataset = MakeDataset(dataset_path=args.dataset_dir, subset=args.subset,
-                              eval="val", num_partial_pattern=4, device=args.device)
-    val_dataloader = DataLoader(dataset=val_dataset, batch_size=2, shuffle=True,
-                                drop_last=True, collate_fn=OriginalCollate(args.device))
+                              eval="val", num_partial_pattern=1, device=args.device)
+    val_dataloader = DataLoader(dataset=val_dataset, batch_size=10, shuffle=True, num_workers=4,
+                                collate_fn=OriginalCollate(args.device))
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # prepare model and optimaizer
     model_G = PFNet(latent_dim=args.latent_dim, final_num_points=args.final_num_points).to(args.device)
@@ -168,6 +169,9 @@ if __name__ == "__main__":
         lr_schdualer_G = torch.optim.lr_scheduler.StepLR(optim_G, step_size=int(args.epochs/4), gamma=0.2)
         lr_schdualer_D = torch.optim.lr_scheduler.StepLR(optim_D, step_size=int(args.epochs/4), gamma=0.2)
 
+    if multiprocessing.get_start_method() == 'fork':
+        multiprocessing.set_start_method('spawn', force=True)
+        print("{} setup done".format(multiprocessing.get_start_method()))
     torch.autograd.set_detect_anomaly(True)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # main loop
